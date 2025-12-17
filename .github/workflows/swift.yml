@@ -69,48 +69,77 @@ jobs:
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Build XCFramework (iOS + iOS Simulator)
-        shell: bash
-        run: |
-          set -euo pipefail
+            - name: Build XCFramework (SwiftPM archive, iOS + Simulator)
+          shell: bash
+          run: |
+            set -euo pipefail
 
-          NAME="${{ steps.vars.outputs.name }}"
-          OUT_DIR="artifacts"
-          DERIVED="DerivedData"
-          rm -rf "$OUT_DIR" "$DERIVED"
-          mkdir -p "$OUT_DIR"
+            NAME="${{ steps.vars.outputs.name }}"
+            OUT_DIR="artifacts"
+            DERIVED="DerivedData"
 
-          xcodebuild -scheme "$NAME" -configuration Release -derivedDataPath "$DERIVED" \
-            -destination "generic/platform=iOS" \
-            -sdk iphoneos \
-            BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
-            SKIP_INSTALL=NO \
-            clean build
+            rm -rf "$OUT_DIR" "$DERIVED"
+            mkdir -p "$OUT_DIR" "$DERIVED"
 
-          xcodebuild -scheme "$NAME" -configuration Release -derivedDataPath "$DERIVED" \
-            -destination "generic/platform=iOS Simulator" \
-            -sdk iphonesimulator \
-            BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
-            SKIP_INSTALL=NO \
-            clean build
+            WORKSPACE=".swiftpm/xcode/package.xcworkspace"
 
-          IOS_FRAMEWORK="$(find "$DERIVED" -type d -path "*Release-iphoneos/${NAME}.framework" | head -n 1)"
-          SIM_FRAMEWORK="$(find "$DERIVED" -type d -path "*Release-iphonesimulator/${NAME}.framework" | head -n 1)"
+            if [[ ! -d "$WORKSPACE" ]]; then
+              echo "Missing SwiftPM Xcode workspace at $WORKSPACE"
+              echo "Repo root is: $(pwd)"
+              ls -la
+              exit 1
+            fi
 
-          if [[ -z "$IOS_FRAMEWORK" || -z "$SIM_FRAMEWORK" ]]; then
-            echo "Could not find built frameworks."
-            echo "IOS_FRAMEWORK=$IOS_FRAMEWORK"
-            echo "SIM_FRAMEWORK=$SIM_FRAMEWORK"
-            exit 1
-          fi
+            IOS_ARCHIVE_PATH="$DERIVED/${NAME}-iOS.xcarchive"
+            SIM_ARCHIVE_PATH="$DERIVED/${NAME}-iOSSim.xcarchive"
 
-          xcodebuild -create-xcframework \
-            -framework "$IOS_FRAMEWORK" \
-            -framework "$SIM_FRAMEWORK" \
-            -output "$OUT_DIR/${NAME}.xcframework"
+            echo "Archiving iOS..."
+            xcodebuild archive \
+              -workspace "$WORKSPACE" \
+              -scheme "$NAME" \
+              -configuration Release \
+              -destination "generic/platform=iOS" \
+              -archivePath "$IOS_ARCHIVE_PATH" \
+              SKIP_INSTALL=NO \
+              BUILD_LIBRARY_FOR_DISTRIBUTION=YES
 
-          ditto -c -k --sequesterRsrc --keepParent "$OUT_DIR/${NAME}.xcframework" "$OUT_DIR/${NAME}.xcframework.zip"
-          shasum -a 256 "$OUT_DIR/${NAME}.xcframework.zip" | awk '{print $1}' > "$OUT_DIR/${NAME}.xcframework.zip.sha256"
+            echo "Archiving iOS Simulator..."
+            xcodebuild archive \
+              -workspace "$WORKSPACE" \
+              -scheme "$NAME" \
+              -configuration Release \
+              -destination "generic/platform=iOS Simulator" \
+              -archivePath "$SIM_ARCHIVE_PATH" \
+              SKIP_INSTALL=NO \
+              BUILD_LIBRARY_FOR_DISTRIBUTION=YES
+
+            IOS_FRAMEWORK="$IOS_ARCHIVE_PATH/Products/Library/Frameworks/${NAME}.framework"
+            SIM_FRAMEWORK="$SIM_ARCHIVE_PATH/Products/Library/Frameworks/${NAME}.framework"
+
+            if [[ ! -d "$IOS_FRAMEWORK" || ! -d "$SIM_FRAMEWORK" ]]; then
+              echo "Could not find archived frameworks."
+              echo "IOS_FRAMEWORK=$IOS_FRAMEWORK"
+              echo "SIM_FRAMEWORK=$SIM_FRAMEWORK"
+              echo "--- iOS archive tree (top):"
+              find "$IOS_ARCHIVE_PATH" -maxdepth 4 -type d | head -n 200
+              echo "--- Sim archive tree (top):"
+              find "$SIM_ARCHIVE_PATH" -maxdepth 4 -type d | head -n 200
+              exit 1
+            fi
+
+            echo "Creating XCFramework..."
+            xcodebuild -create-xcframework \
+              -framework "$IOS_FRAMEWORK" \
+              -framework "$SIM_FRAMEWORK" \
+              -output "$OUT_DIR/${NAME}.xcframework"
+
+            echo "Zipping..."
+            ditto -c -k --sequesterRsrc --keepParent \
+              "$OUT_DIR/${NAME}.xcframework" \
+              "$OUT_DIR/${NAME}.xcframework.zip"
+
+            shasum -a 256 "$OUT_DIR/${NAME}.xcframework.zip" | awk '{print $1}' \
+              > "$OUT_DIR/${NAME}.xcframework.zip.sha256"
 
       - name: Upload XCFramework artifact
         uses: actions/upload-artifact@v4
