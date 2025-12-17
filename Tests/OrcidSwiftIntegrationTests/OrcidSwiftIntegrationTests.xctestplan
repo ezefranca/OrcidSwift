@@ -1,0 +1,18 @@
+{
+  "configurations" : [
+    {
+      "id" : "BC805EFE-5924-4498-9DA3-1E6A65A9131A",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "performanceAntipatternCheckerEnabled" : true
+  },
+  "testTargets" : [
+
+  ],
+  "version" : 1
+}

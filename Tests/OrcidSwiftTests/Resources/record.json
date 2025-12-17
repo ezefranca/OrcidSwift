@@ -1,0 +1,22 @@
+{
+  "orcid-identifier": {
+    "uri": "https://orcid.org/0000-0002-1825-0097",
+    "path": "0000-0002-1825-0097",
+    "host": "orcid.org"
+  },
+  "person": {
+    "name": {
+      "given-names": { "value": "Test" },
+      "family-name": { "value": "User" },
+      "credit-name": { "value": "Test User" }
+    },
+    "biography": {
+      "content": "Example biography"
+    }
+  },
+  "activities-summary": {
+    "works": {
+      "group": []
+    }
+  }
+}

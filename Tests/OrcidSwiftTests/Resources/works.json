@@ -1,0 +1,29 @@
+{
+  "last-modified-date": { "value": 1700000000000 },
+  "group": [
+    {
+      "work-summary": [
+        {
+          "put-code": 123,
+          "title": {
+            "title": { "value": "Example Work" },
+            "subtitle": { "value": "Subtitle" }
+          },
+          "publication-date": {
+            "year": { "value": "2020" },
+            "month": { "value": "01" },
+            "day": { "value": "02" }
+          },
+          "external-ids": {
+            "external-id": [
+              {
+                "external-id-type": "doi",
+                "external-id-value": "10.0000/example"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
