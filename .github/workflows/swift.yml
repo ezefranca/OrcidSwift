@@ -53,7 +53,7 @@ jobs:
         run: swift test -v --filter OrcidSwiftIntegrationTests
 
   xcframework:
-    runs-on: macos-latest
+    runs-on: macos-26
     needs: build_and_test
     if: ${{ inputs.build_xcframework == true || startsWith(github.ref, 'refs/tags/v') }}
     steps:
@@ -121,7 +121,7 @@ jobs:
             artifacts/*.sha256
 
   release_assets:
-    runs-on: macos-latest
+    runs-on: macos-26
     needs: xcframework
     if: ${{ (inputs.publish_release_assets == true || startsWith(github.ref, 'refs/tags/v')) && (inputs.build_xcframework == true || startsWith(github.ref, 'refs/tags/v')) }}
     steps:
