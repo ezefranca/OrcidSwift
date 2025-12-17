@@ -1,0 +1,140 @@
+name: OrcidSwift
+
+on:
+  push:
+    branches: ["main"]
+    tags:
+      - "v*"
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      run_integration_tests:
+        description: "Run ORCID integration tests (hits the internet)"
+        type: boolean
+        default: false
+      build_xcframework:
+        description: "Build XCFramework artifact"
+        type: boolean
+        default: false
+      publish_release_assets:
+        description: "Upload XCFramework to GitHub Release (requires tag trigger or run with a tag ref)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_and_test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: SwiftPM build
+        run: swift build -v
+
+      - name: SwiftPM unit tests
+        run: swift test -v
+
+      - name: SwiftPM integration tests (opt-in)
+        if: ${{ inputs.run_integration_tests == true }}
+        env:
+          ORCIDSWIFT_RUN_INTEGRATION_TESTS: "1"
+        run: swift test -v --filter OrcidSwiftIntegrationTests
+
+  xcframework:
+    runs-on: macos-latest
+    needs: build_and_test
+    if: ${{ inputs.build_xcframework == true || startsWith(github.ref, 'refs/tags/v') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set variables
+        id: vars
+        shell: bash
+        run: |
+          set -euo pipefail
+          NAME="OrcidSwift"
+          VERSION="${GITHUB_REF_NAME:-dev}"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build XCFramework (iOS + iOS Simulator)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          NAME="${{ steps.vars.outputs.name }}"
+          OUT_DIR="artifacts"
+          DERIVED="DerivedData"
+          rm -rf "$OUT_DIR" "$DERIVED"
+          mkdir -p "$OUT_DIR"
+
+          xcodebuild -scheme "$NAME" -configuration Release -derivedDataPath "$DERIVED" \
+            -destination "generic/platform=iOS" \
+            -sdk iphoneos \
+            BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
+            SKIP_INSTALL=NO \
+            clean build
+
+          xcodebuild -scheme "$NAME" -configuration Release -derivedDataPath "$DERIVED" \
+            -destination "generic/platform=iOS Simulator" \
+            -sdk iphonesimulator \
+            BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
+            SKIP_INSTALL=NO \
+            clean build
+
+          IOS_FRAMEWORK="$(find "$DERIVED" -type d -path "*Release-iphoneos/${NAME}.framework" | head -n 1)"
+          SIM_FRAMEWORK="$(find "$DERIVED" -type d -path "*Release-iphonesimulator/${NAME}.framework" | head -n 1)"
+
+          if [[ -z "$IOS_FRAMEWORK" || -z "$SIM_FRAMEWORK" ]]; then
+            echo "Could not find built frameworks."
+            echo "IOS_FRAMEWORK=$IOS_FRAMEWORK"
+            echo "SIM_FRAMEWORK=$SIM_FRAMEWORK"
+            exit 1
+          fi
+
+          xcodebuild -create-xcframework \
+            -framework "$IOS_FRAMEWORK" \
+            -framework "$SIM_FRAMEWORK" \
+            -output "$OUT_DIR/${NAME}.xcframework"
+
+          ditto -c -k --sequesterRsrc --keepParent "$OUT_DIR/${NAME}.xcframework" "$OUT_DIR/${NAME}.xcframework.zip"
+          shasum -a 256 "$OUT_DIR/${NAME}.xcframework.zip" | awk '{print $1}' > "$OUT_DIR/${NAME}.xcframework.zip.sha256"
+
+      - name: Upload XCFramework artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OrcidSwift-xcframework
+          path: |
+            artifacts/*.zip
+            artifacts/*.sha256
+
+  release_assets:
+    runs-on: macos-latest
+    needs: xcframework
+    if: ${{ (inputs.publish_release_assets == true || startsWith(github.ref, 'refs/tags/v')) && (inputs.build_xcframework == true || startsWith(github.ref, 'refs/tags/v')) }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: OrcidSwift-xcframework
+          path: artifacts
+
+      - name: Create GitHub Release (if needed) and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/*.zip
+            artifacts/*.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
