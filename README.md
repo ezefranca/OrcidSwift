@@ -1,6 +1,6 @@
-# OrcidSwift
+# OrcidSwift <img width="60" height="60" alt="orcid_swift" src="https://github.com/user-attachments/assets/c209c86d-7106-4d9c-a18d-4e5fd0c51a34" />
 
-A lightweight async Swift client for the public ORCID API, plus small helper types for OAuth URL construction and token exchange.
+A lightweight async Swift client for the public [ORCID API](https://info.orcid.org/what-is-orcid/services/public-api/), plus small helper types for OAuth URL construction and token exchange.
 
 ## Requirements
 
